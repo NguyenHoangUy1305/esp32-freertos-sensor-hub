@@ -1,4 +1,7 @@
 # ⚙️ MULTI-TASKING FREERTOS SENSOR HUB (ESP-IDF)
+
+[![CI](https://github.com/NguyenHoangUy1305/esp32-freertos-sensor-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/NguyenHoangUy1305/esp32-freertos-sensor-hub/actions/workflows/ci.yml)
+
 > **Tên đề tài:** High-Performance Dual-Core Sensor Hub with FreeRTOS Inter-Task Communication and Fault Recovery  
 > **Thời gian:** Tháng 05/2027 (3 tuần)  
 > **Mục tiêu:** Chinh phục kỹ năng Firmware Engineer chuyên sâu; làm chủ hệ điều hành thời gian thực (RTOS), lập trình đa nhân vi điều khiển, đồng bộ tài nguyên và xử lý lỗi phần cứng.
