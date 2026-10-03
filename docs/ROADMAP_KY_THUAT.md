@@ -2,7 +2,7 @@
 ## Đề tài: Hub cảm biến đa tác vụ sử dụng FreeRTOS & ESP-IDF (Multi-tasking Sensor Hub)
 
 > **Người thực hiện:** Kỹ sư IoT / Embedded  
-> **Thời gian:** 3 tuần (Tháng 05/2027)  
+> **Thời gian:** 4 - 6 tuần (Tháng 04/2027 - Tháng 05/2027)  
 > **Ghi chú tác giả:** Dự án chuyển dịch từ môi trường Arduino cơ bản sang **ESP-IDF** (Espressif IoT Development Framework) chuẩn chuyên nghiệp, làm chủ lập trình đa nhân vi điều khiển và hệ điều hành thời gian thực (RTOS).
 
 ---

@@ -7,7 +7,7 @@
 
 > **Tên đề tài:** Xây dựng trạm thu thập dữ liệu đa cảm biến thời gian thực ứng dụng hệ điều hành FreeRTOS và kiến trúc đa nhân trên vi điều khiển ESP32  
 > **Tác giả:** Kỹ sư IoT & Hệ thống nhúng (NguyenHoangUy1305)  
-> **Thời gian:** Tháng 05/2027  
+> **Thời gian:** Tháng 04/2027 - Tháng 05/2027  
 > **Trọng tâm:** Chuyển dịch từ Arduino cơ bản sang **ESP-IDF** chuyên nghiệp, làm chủ lập trình đa nhân vi điều khiển, các cơ chế đồng bộ IPC (Queue, Mutex, Semaphore, EventGroup) và Task Watchdog Timer.
 
 ---
