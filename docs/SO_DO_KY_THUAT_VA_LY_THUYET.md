@@ -3,7 +3,8 @@
 
 > **Tác giả:** Kỹ sư IoT & Hệ thống nhúng (NguyenHoangUy1305)  
 > **Repository:** [NguyenHoangUy1305/esp32-freertos-sensor-hub](https://github.com/NguyenHoangUy1305/esp32-freertos-sensor-hub)  
-> **Mục đích:** Tài liệu này cung cấp toàn bộ nền tảng lý thuyết chuyên sâu về Hệ điều hành thời gian thực (RTOS), lập trình đa nhân trên vi điều khiển ESP32 với ESP-IDF, các cơ chế giao tiếp liên tác vụ (Queue, Mutex, Semaphore, EventGroup), cơ chế giám sát độ tin cậy bằng Task Watchdog Timer và quy trình thực hiện.
+> **Thời gian thực hiện:** Tháng 04/2027 - Tháng 05/2027  
+> **Mục đích:** Cung cấp tài liệu kỹ thuật chuyên sâu về lập trình hệ thống thời gian thực (RTOS), kiến trúc vi xử lý đa nhân Dual-Core Xtensa, các cơ chế truyền thông liên tác vụ (IPC: Queue, Mutex, Priority Inheritance, EventGroup), cơ chế giám sát Task Watchdog Timer và thuật toán lọc số tín hiệu cảm biến.
 
 ---
 
@@ -11,14 +12,15 @@
 1. [PHẦN 1: CƠ SỞ LÝ THUYẾT & NGUYÊN LÝ HOẠT ĐỘNG CHUYÊN SÂU](#phần-1-cơ-sở-lý-thuyết--nguyên-lý-hoạt-động-chuyên-sâu)
    - 1.1 Khái niệm Hệ điều hành thời gian thực (RTOS) & Tính tất định (Determinism)
    - 1.2 Hạn chế của Arduino Super-Loop & Giải pháp RTOS Preemptive Scheduling
-   - 1.3 Kiến trúc Dual-Core Xtensa LX6 & Chiến lược gán nhân vi xử lý
-   - 1.4 Các cơ chế truyền thông và đồng bộ hóa liên tác vụ (IPC):
+   - 1.3 Bộ điều phối Scheduler, SysTick Timer & Phân biệt vTaskDelay vs vTaskDelayUntil
+   - 1.4 Kiến trúc Dual-Core Xtensa LX6 & Chiến lược gán nhân vi xử lý
+   - 1.5 Các cơ chế truyền thông và đồng bộ hóa liên tác vụ (IPC):
      - FreeRTOS Queue (Hàng đợi an toàn tuyến trình)
      - Mutex & Hiện tượng Hiểm họa Nghịch đảo độ ưu tiên (Priority Inversion)
      - Binary Semaphore, Counting Semaphore & Task Notifications
      - Event Groups (Đồng bộ hóa đa điều kiện)
-   - 1.5 Cơ chế giám sát độ tin cậy Task Watchdog Timer (TWDT)
-   - 1.6 Thuật toán lọc tín hiệu số cảm biến (DSP: Exponential Moving Average)
+   - 1.6 Cơ chế giám sát độ tin cậy Task Watchdog Timer (TWDT)
+   - 1.7 Thuật toán lọc tín hiệu số cảm biến (DSP: Exponential Moving Average)
 2. [PHẦN 2: SƠ ĐỒ KỸ THUẬT & SƠ ĐỒ ĐẤU NỐI MẠCH (PINOUT)](#phần-2-sơ-đồ-kỹ-thuật--sơ-đồ-đấu-nối-mạch-pinout)
    - 2.1 Bảng ánh xạ chân GPIO chi tiết (Hardware Pinout Matrix)
    - 2.2 Sơ đồ nguyên lý mạch điện phần cứng đa cảm biến
@@ -47,25 +49,40 @@
   - Lệnh `delay(1000)` làm CPU bị treo cứng vào các vòng lặp vô nghĩa (Nop) để chờ thời gian trôi qua.
   - Trong lúc CPU đang bị "bắt cóc" bởi `delay()`, vi điều khiển không thể phát hiện nút nhấn khẩn cấp, không thể đón nhận gói tin mạng, dẫn đến tình trạng mất kiểm soát hệ thống.
 * **Bộ điều phối chiếm quyền ưu tiên (Preemptive Priority-Based Scheduler):**
-  - Scheduler của FreeRTOS được điều khiển bởi một ngắt đồng hồ nhịp tim phần cứng (**SysTick Timer**, cấu hình `configTICK_RATE_HZ = 1000` tức là $1\text{ ms}$ mỗi tick).
+  - Scheduler của FreeRTOS được điều khiển bởi một ngắt đồng hồ nhịp tim phần cứng (**SysTick Timer**, cấu hình `configTICK_RATE_HZ = 1000` tức là $1	ext{ ms}$ mỗi tick).
   - Mỗi Task được gán một mức độ ưu tiên (**Priority**, từ 0 đến `configMAX_PRIORITIES - 1`).
   - **Quy tắc bất biến:** Task có Priority cao nhất đang ở trạng thái `READY` sẽ **ngay lập tức chiếm CPU** để thực thi.
   - Khi một Task gọi hàm `vTaskDelay(pdMS_TO_TICKS(100))` hoặc `vTaskDelayUntil()`, nó không chiếm CPU mà tự chuyển mình sang trạng thái `BLOCKED`, nhường trọn vẹn tài nguyên CPU cho các Task khác làm việc!
 
 ---
 
-### 1.3. Kiến trúc Dual-Core Xtensa LX6 & Chiến lược gán nhân vi xử lý
+### 1.3. Bộ điều phối Scheduler, SysTick Timer & Phân biệt vTaskDelay vs vTaskDelayUntil
+* **Hiện tượng trôi thời gian tích lũy (Cumulative Drift) khi dùng `vTaskDelay`:**
+  - Giả sử bạn muốn đọc cảm biến mỗi $100	ext{ ms}$. Hàm xử lý đọc cảm biến tốn $15	ext{ ms}$.
+  - Nếu bạn dùng `vTaskDelay(100)`: Sau khi code chạy xong ($15	ext{ ms}$), CPU mới bắt đầu đếm lùi $100	ext{ ms}$.
+  - Tổng chu kỳ thực tế sẽ là:
+    $$T_{	ext{actual}} = T_{	ext{execution}} + T_{	ext{delay}} = 15	ext{ ms} + 100	ext{ ms} = 115	ext{ ms}!$$
+  - Cứ sau 10 chu kỳ, thời gian lấy mẫu đã bị trôi đi $150	ext{ ms}$, làm sai lệch hoàn toàn tần số lấy mẫu của các bộ lọc số DSP.
+* **Giải pháp chuẩn xác với `vTaskDelayUntil`:**
+  - Hàm lưu trữ biến mốc thời gian đánh thức tuyệt đối `xLastWakeTime`.
+  - Hàm tự động tính toán và bù trừ thời gian thực thi của code:
+    $$T_{	ext{sleep}} = 	ext{Period} - T_{	ext{execution}} = 100	ext{ ms} - 15	ext{ ms} = 85	ext{ ms}$$
+  - Đảm bảo chu kỳ tuần hoàn lặp lại luôn chính xác tuyệt đối đúng $100.0	ext{ ms}$ từng mili-giây!
+
+---
+
+### 1.4. Kiến trúc Dual-Core Xtensa LX6 & Chiến lược gán nhân vi xử lý
 Vi điều khiển ESP32 tích hợp hai nhân xử lý 32-bit độc lập:
 * **Core 0 (PRO_CPU - Protocol CPU):** Mặc định được hệ thống FreeRTOS của Espressif phân bổ để xử lý các tầng giao thức ngắt mạng nặng (Wi-Fi, Bluetooth, TCP/IP stack).
 * **Core 1 (APP_CPU - Application CPU):** Mặc định dành cho mã logic ứng dụng người dùng.
 * **Chiến lược gán nhân bằng hàm `xTaskCreatePinnedToCore()`:**
   - **Gán vào Core 0:** Task đo đạc cảm biến thời gian thực cao tốc và các bộ lọc số yêu cầu chu kỳ lấy mẫu chính xác từng mili-giây.
   - **Gán vào Core 1:** Task vẽ giao diện đồ họa OLED nặng nề, Task tính toán logic nghiệp vụ và Task truyền thông nối tiếp UART/Serial.
-  - Nhờ đó, việc màn hình OLED vẽ đồ thị tốn $50\text{ ms}$ cũng **không bao giờ làm ảnh hưởng hay gây trễ** đến chu kỳ đọc cảm biến của Core 0!
+  - Nhờ đó, việc màn hình OLED vẽ đồ thị tốn $50	ext{ ms}$ cũng **không bao giờ làm ảnh hưởng hay gây trễ** đến chu kỳ đọc cảm biến của Core 0!
 
 ---
 
-### 1.4. Các cơ chế truyền thông và đồng bộ hóa liên tác vụ (IPC)
+### 1.5. Các cơ chế truyền thông và đồng bộ hóa liên tác vụ (IPC)
 
 #### A. FreeRTOS Queue (Hàng đợi an toàn tuyến trình)
 * Queue là cơ chế giao tiếp chính giữa các Task trong FreeRTOS.
@@ -96,7 +113,7 @@ Cho phép một Task chuyển sang trạng thái chờ đồng thời nhiều c�
 
 ---
 
-### 1.5. Cơ chế giám sát độ tin cậy Task Watchdog Timer (TWDT)
+### 1.6. Cơ chế giám sát độ tin cậy Task Watchdog Timer (TWDT)
 * Trong hệ thống nhúng hoạt động 24/7, một lỗi logic nhỏ có thể dẫn đến **Deadlock** (hai Task chờ Mutex chéo nhau) hoặc rơi vào vòng lặp vô tận (Infinite Loop).
 * **Cơ chế Watchdog trong ESP-IDF:**
   - ESP-IDF tích hợp bộ định thời phần cứng **Task Watchdog Timer (TWDT)** với chu kỳ cấu hình (ví dụ: 5 giây).
@@ -106,15 +123,15 @@ Cho phép một Task chuyển sang trạng thái chờ đồng thời nhiều c�
 
 ---
 
-### 1.6. Thuật toán lọc tín hiệu số cảm biến (DSP: Exponential Moving Average)
+### 1.7. Thuật toán lọc tín hiệu số cảm biến (DSP: Exponential Moving Average)
 Các cảm biến vật lý (nhiệt độ, ánh sáng, gia tốc) luôn có nhiễu đột biến ngẫu nhiên (Noise spikes).
 * **Bộ lọc trung bình động thông thường (Simple Moving Average - SMA):** Đòi hỏi phải lưu một mảng $N$ phần tử trong RAM và tính tổng, tốn bộ nhớ và thời gian tính toán.
 * **Bộ lọc trung bình động lũy thừa (Exponential Moving Average - EMA):**
-  $$S_t = \alpha \cdot Y_t + (1 - \alpha) \cdot S_{t-1}$$
+  $$S_t = lpha \cdot Y_t + (1 - lpha) \cdot S_{t-1}$$
   - $Y_t$: Giá trị đo thô mới nhất từ cảm biến tại thời điểm $t$.
   - $S_{t-1}$: Giá trị đã qua lọc ở chu kỳ trước.
   - $S_t$: Giá trị sau khi lọc ở chu kỳ hiện tại.
-  - $\alpha$: Hệ số làm mịn ($0 < \alpha \le 1$). Nếu $\alpha$ nhỏ (ví dụ $0.1$), tín hiệu mượt mà, triệt nhiễu cực tốt. Nếu $\alpha$ lớn (ví dụ $0.8$), hệ thống phản hồi cực nhanh với sự thay đổi thực tế.
+  - $lpha$: Hệ số làm mịn ($0 < lpha \le 1$). Nếu $lpha$ nhỏ (ví dụ $0.1$), tín hiệu mượt mà, triệt nhiễu cực tốt. Nếu $lpha$ lớn (ví dụ $0.8$), hệ thống phản hồi cực nhanh với sự thay đổi thực tế.
   - Thuật toán chỉ tốn đúng **4 bytes RAM** để lưu giá trị $S_{t-1}$ và chỉ mất 2 phép tính số học, hoàn hảo cho hệ thống thời gian thực!
 
 ---
